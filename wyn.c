@@ -132,7 +132,7 @@ int wyn_win32_destroy(wyndow* w) {
 
 #ifdef PLTFRM_LINUX
 #include "stdlib.h"
-#include "stdio.h"
+#include <stdio.h>
 #include<X11/X.h>
 #include<X11/Xlib.h>
 #include<GL/gl.h>
@@ -143,11 +143,14 @@ int wyn_win32_destroy(wyndow* w) {
 #include <string.h>
 #endif
 
+typedef GLXContext (*PFN_glXCreateContextAttribsARB)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
+
 #define LNX_CHECK(val, msg) if (!val) {printf("%s", msg); return (-1);}
 typedef struct  {
     Display*    dsp;
     GLXWindow   glx_win;
-    wyn_rect    _last_metrics;
+    GLXFBConfig fb_conf;
+    wyn_rect    last_metrics;
 } lnx_wyn_data;
 #define get_lnx(w) ((lnx_wyn_data*)((w)->extra))
 
@@ -189,7 +192,6 @@ int wyn_linux_set_pos(wyndow* w,wyn_vec2 p) {
 
 int  wyn_linux_create(wyndow* w, wyn_crt_info* crt_inf) { 
     lnx_wyn_data* dat = wyn_alloc(lnx_wyn_data);
-    GLXFBConfig             fb_conf;
     int                     root;
     Window                  win;
     XVisualInfo             *vi;
@@ -203,9 +205,9 @@ int  wyn_linux_create(wyndow* w, wyn_crt_info* crt_inf) {
     root = DefaultRootWindow(dat->dsp);
     fbConfings = glXChooseFBConfig(dat->dsp, DefaultScreen(dat->dsp), fbAttribs, &count);
     LNX_CHECK(fbConfings, "FBConf not found");
-    fb_conf = fbConfings[0];
+    dat->fb_conf = fbConfings[0];
     XFree(fbConfings);
-    vi = glXGetVisualFromFBConfig(dat->dsp, fb_conf);
+    vi = glXGetVisualFromFBConfig(dat->dsp, dat->fb_conf);
     LNX_CHECK(vi, "Get Visual failed");
     cmap = XCreateColormap(dat->dsp, root, vi->visual, AllocNone);
     swa.colormap = cmap;
@@ -214,10 +216,10 @@ int  wyn_linux_create(wyndow* w, wyn_crt_info* crt_inf) {
                         crt_inf->rect.pos.x, crt_inf->rect.pos.y, 
                         crt_inf->rect.size.x, crt_inf->rect.size.y,
                         0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
-    dat->glx_win = glXCreateWindow(dat->dsp, fb_conf, win, 0);
+    dat->glx_win = glXCreateWindow(dat->dsp, dat->fb_conf, win, 0);
     XSetWindowBackground(dat->dsp, win, 0x0);
     LNX_CHECK(dat->glx_win, "Failed to create glx window");
-    memcpy(&dat->_last_metrics, &crt_inf->rect, sizeof(crt_inf->rect));
+    memcpy(&dat->last_metrics, &crt_inf->rect, sizeof(crt_inf->rect));
     w->handle = win;
     w->extra  = dat;
     w->state.should_close = 0;
@@ -246,13 +248,13 @@ int wyn_linux_update(wyndow* w) {
                 wyn_vec2          s;
                 s.x = ev.width;
                 s.y = ev.height;
-                if (s.x != lnx->_last_metrics.size.x || s.y != lnx->_last_metrics.size.y) {
+                if (s.x != lnx->last_metrics.size.x || s.y != lnx->last_metrics.size.y) {
                     lnx_call(w->_callbacks[WYN_RESIZE_CBK_IDX], wyn_rz_callback_proc, w, s, w->_callbakcs_usr_data[WYN_RESIZE_CBK_IDX]);
                 }
-                lnx->_last_metrics.pos.x  = ev.x;
-                lnx->_last_metrics.pos.y  = ev.y;
-                lnx->_last_metrics.size.x = ev.width;
-                lnx->_last_metrics.size.y = ev.height;
+                lnx->last_metrics.pos.x  = ev.x;
+                lnx->last_metrics.pos.y  = ev.y;
+                lnx->last_metrics.size.x = ev.width;
+                lnx->last_metrics.size.y = ev.height;
                 break;
             }
             case KeyPress: {
@@ -286,6 +288,44 @@ int  wyn_linux_destroy(wyndow* win) {
     return 0;
 }
 
+static int ctx_attribs[] = {
+    GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+    GLX_CONTEXT_MINOR_VERSION_ARB, 2,
+    GLX_CONTEXT_PROFILE_MASK_ARB,  GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+    GLX_CONTEXT_FLAGS_ARB,         GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+    None
+};
+
+int wyn_linux_glctx_create(wyndow* w, wyn_glctx* glc, wyn_glctx_crt_info* crt_info) {
+    lnx_wyn_data* lnx = get_lnx(w); 
+    PFN_glXCreateContextAttribsARB glXCreateContextAttribsARB = (PFN_glXCreateContextAttribsARB)glXGetProcAddressARB((const GLubyte*)"glXCreateContextAttribsARB");
+    ctx_attribs[1] = crt_info->major;
+    ctx_attribs[3] = crt_info->minor;
+    ctx_attribs[5] = crt_info->compatibilityProfile ? GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB : GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
+    glc->handle = glXCreateContextAttribsARB(lnx->dsp, lnx->fb_conf, 0, 1, ctx_attribs);
+    LNX_CHECK(glc, "Failed to create gl context");
+    glXMakeContextCurrent(lnx->dsp, lnx->glx_win, lnx->glx_win, glc->handle);
+    glc->owner = w;
+    return 0;
+}
+
+void wyn_linux_glctx_destroy(wyn_glctx* glc) {
+    lnx_wyn_data* lnx = get_lnx(glc->owner);
+    glXMakeContextCurrent(lnx->dsp, lnx->glx_win, lnx->glx_win, 0);
+    glXDestroyContext(lnx->dsp, glc->handle);
+    glc->handle = 0;
+}
+
+void wyn_linux_glctx_make_current(wyndow* w,wyn_glctx* glc) {
+    lnx_wyn_data* lnx = get_lnx(glc->owner);
+    if (!glc) {
+        glXMakeContextCurrent(lnx->dsp, lnx->glx_win, lnx->glx_win, 0);
+        return;
+    }
+    glXMakeContextCurrent(lnx->dsp, lnx->glx_win, lnx->glx_win, glc->handle);
+    glc->handle = 0;
+    glc->owner  = 0;
+}
 
 #endif
 
@@ -296,12 +336,15 @@ int (*wyn_destroy)(wyndow* w, wyn_crt_info*) = wyn_win32_destroy;
 int (*wyn_show)(wyndow*, bool)               = wyn_win32_show;
 #endif
 #ifdef PLTFRM_LINUX
-int (*wyn_create)(wyndow*, wyn_crt_info*)    = wyn_linux_create;
-int (*wyn_destroy)(wyndow* w)                = wyn_linux_destroy;
-int (*wyn_show)(wyndow*, bool)               = wyn_linux_show;
-int (*wyn_set_title)(wyndow*, const char* )  = wyn_linux_set_title;
-int (*wyn_update)(wyndow* w)                 = wyn_linux_update;
-int (*wyn_swap)(wyndow* w)                   = wyn_linux_swap;
+int (*wyn_create)(wyndow*, wyn_crt_info*)                           = wyn_linux_create;
+int (*wyn_destroy)(wyndow* w)                                       = wyn_linux_destroy;
+int (*wyn_show)(wyndow*, bool)                                      = wyn_linux_show;
+int (*wyn_set_title)(wyndow*, const char* )                         = wyn_linux_set_title;
+int (*wyn_update)(wyndow* w)                                        = wyn_linux_update;
+int (*wyn_swap)(wyndow* w)                                          = wyn_linux_swap;
+int (*wyn_glctx_create)(wyndow*, wyn_glctx*, wyn_glctx_crt_info*) = wyn_linux_glctx_create;
+void(*wyn_glctx_make_current)(wyndow* w,wyn_glctx* glc)            = wyn_linux_glctx_make_current;
+void(*wyn_glctx_destroy)(wyn_glctx* glc)                           = wyn_linux_glctx_destroy;
 #endif
 
 void wyn_rz_cbk_reg(wyndow* w, wyn_rz_callback_proc proc, void* usr_data) {
@@ -310,6 +353,8 @@ void wyn_rz_cbk_reg(wyndow* w, wyn_rz_callback_proc proc, void* usr_data) {
 }
 
 void resize(wyndow* w, wyn_vec2 s, void* usr_data) {
+    glClearColor(1.0, 0.0, 0.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
     printf("Resize Size: %d, %d\n", s.x, s.y);
     fflush(stdout);
 }
@@ -317,17 +362,24 @@ void resize(wyndow* w, wyn_vec2 s, void* usr_data) {
 int main() {
     wyndow       w;
     wyn_crt_info inf;
-    inf.desc     = (char*)"HelloWorld";
-    inf.rect.pos.x   = 0; 
+    wyn_glctx_crt_info gl_inf;
+    wyn_glctx   glc;
+    inf.desc         = (char*)"X11Window!";
+    inf.rect.pos.x   = 0;
     inf.rect.pos.y   = 0;
-    inf.rect.size.x  = 200;
-    inf.rect.size.y  = 200;
+    inf.rect.size.x  = 400;
+    inf.rect.size.y  = 400;
+    gl_inf.major                = 3;
+    gl_inf.minor                = 2;
+    gl_inf.compatibilityProfile = 0;
     wyn_create(&w, &inf);
+    wyn_glctx_create(&w, &glc, &gl_inf);
     wyn_rz_cbk_reg(&w, resize, 0);
+    resize(&w, inf.rect.pos, 0);
     while (!w.state.should_close) {
         wyn_update(&w);
         wyn_swap(&w);
     };
+    wyn_glctx_destroy(&glc);
     wyn_destroy(&w);
-    printf("AYoo\n");
 }

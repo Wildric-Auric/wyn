@@ -16,13 +16,16 @@ typedef struct {
     int x;
     int y;
 } wyn_vec2;
+
 typedef struct {
     wyn_vec2 pos;
     wyn_vec2 size;
 } wyn_rect;
+
 typedef struct {
     bool should_close;
 } wyn_state;
+
 typedef struct {
     ui64      handle;     
     void*     extra;
@@ -35,6 +38,17 @@ typedef struct {
     char*     desc; 
     wyn_rect  rect;
 } wyn_crt_info;
+
+typedef struct {
+    wyndow* owner;
+    void*   handle; 
+} wyn_glctx;
+
+typedef struct {
+    int  major;
+    int  minor;
+    bool compatibilityProfile;
+} wyn_glctx_crt_info;
 
 typedef void (*wyn_rz_callback_proc)(wyndow* w, wyn_vec2 new_size, void* usr_data);
 
@@ -54,13 +68,17 @@ int  wyn_linux_create(wyndow*, wyn_crt_info*);
 int  wyn_linux_destroy(wyndow* w);
 #endif
 
-extern int (*wyn_create)(wyndow*, wyn_crt_info*);
-extern int (*wyn_destroy)(wyndow* w);
-extern int (*wyn_show)(wyndow* w,bool flag);
-extern int (*wyn_set_title)(wyndow* w, const char* desc);
-extern int (*wyn_update)(wyndow* w);
-extern int (*wyn_swap)(wyndow* w);
+extern int      (*wyn_create)                   (wyndow*, wyn_crt_info*);
+extern int      (*wyn_destroy)                  (wyndow* w);
+extern int      (*wyn_show)                     (wyndow* w,bool flag);
+extern int      (*wyn_set_title)                (wyndow* w, const char* desc);
+extern int      (*wyn_update)                   (wyndow* w);
+extern int      (*wyn_swap)                     (wyndow* w);
+extern int      (*wyn_glctx_create)             (wyndow* w, wyn_glctx* glc, wyn_glctx_crt_info* crt_info);
+extern void     (*wyn_glctx_make_current)       (wyndow* w,wyn_glctx* glc);
+extern void     (*wyn_glctx_destroy)            (wyn_glctx* glc);
 void wyn_rz_cbk_reg(wyndow* w, wyn_rz_callback_proc, void* usr_data);
+
 
 
 #endif
