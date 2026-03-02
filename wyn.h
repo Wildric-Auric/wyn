@@ -2,13 +2,14 @@
 #define _WYN_H
 #include <stdint.h>
 
-#ifndef __cplusplus
-typedef unsigned char bool;
+#ifdef __cplusplus
+extern "C" {
 #endif
 typedef unsigned long Word;
 typedef unsigned char uchar;
 typedef unsigned int  uint;
 typedef uint64_t	  ui64;
+typedef unsigned char boolean;
 
 #define WYN_RESIZE_CBK_IDX 0
 
@@ -23,7 +24,7 @@ typedef struct {
 } wyn_rect;
 
 typedef struct {
-	bool should_close;
+	boolean should_close;
 } wyn_state;
 
 enum wyn_event_mask {
@@ -62,10 +63,10 @@ typedef struct {
 typedef struct {
 	int	 major;
 	int	 minor;
-	bool compatibilityProfile;
+	boolean compatibilityProfile;
 } wyn_glctx_crt_info;
 
-typedef void (*wyn_rz_callback_proc)(wyndow* w, wyn_vec2 new_size, void* usr_data);
+typedef void (*wyn_rz_callback_proc)(wyndow* w, wyn_vec2* new_size, void* usr_data);
 
 #ifdef PLTFRM_WIN32
 typedef enum { DWMWCP_DEFAULT = 0, DWMWCP_DONOTROUND = 1, DWMWCP_ROUND = 2, DWMWCP_ROUNDSMALL = 3 } DWM_WINDOW_CORNER_PREFERENCE;
@@ -80,16 +81,22 @@ int wyn_linux_destroy(wyndow* w);
 
 extern int (*wyn_create)(wyndow*, wyn_crt_info*);
 extern int (*wyn_destroy)(wyndow* w);
-extern int (*wyn_show)(wyndow* w, bool flag);
+extern int (*wyn_show)(wyndow* w, boolean flag);
 extern int (*wyn_set_title)(wyndow* w, const char* desc);
+extern int (*wyn_get_metrics)(wyndow* w, wyn_vec2* out_size, wyn_vec2* out_pos);
 extern int (*wyn_update)(wyndow* w);
 extern int (*wyn_swap)(wyndow* w);
 extern int (*wyn_glctx_create)(wyndow* w, wyn_glctx* glc, wyn_glctx_crt_info* crt_info);
 extern void (*wyn_glctx_make_current)(wyndow* w, wyn_glctx* glc);
 extern void (*wyn_glctx_destroy)(wyn_glctx* glc);
-extern bool (*wyn_key_pressed)(wyndow* w, int key);
-extern bool (*wyn_on_key_press)(wyndow* w, int key);
-extern bool (*wyn_on_key_release)(wyndow* w, int key);
+extern void (*wyn_set_vsync)(wyndow* w, int interval);
+extern boolean (*wyn_key_pressed)(wyndow* w, int key);
+extern boolean (*wyn_on_key_press)(wyndow* w, int key);
+extern boolean (*wyn_on_key_release)(wyndow* w, int key);
+extern boolean (*wyn_get_mouse_pos)(wyndow* w, wyn_vec2* pos);
 void wyn_rz_cbk_reg(wyndow* w, wyn_rz_callback_proc, void* usr_data);
+#ifdef __cplusplus
+}
+#endif
 
 #endif

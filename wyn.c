@@ -1,5 +1,9 @@
 #include "wyn.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define wyn_alloc(type) (type*)malloc(sizeof(type))
 #define wyn_free(type, ptr)                                                                                                      \
 	free((type*)ptr);                                                                                                            \
@@ -133,10 +137,9 @@ int wyn_win32_destroy(wyndow* w) {
 #include <X11/X.h>
 #include <X11/Xlib.h>
 #include <X11/XKBlib.h>
-#include <GL/gl.h>
 #include <GL/glx.h>
 #ifdef __cplusplus
-#include <cstring.h>
+#include <cstring>
 #else
 #include <string.h>
 #endif
@@ -184,7 +187,7 @@ static int fbAttribs[] = {GLX_X_RENDERABLE,
 						  True,
 						  None};
 
-int wyn_linux_show(wyndow* w, bool flag) {
+int wyn_linux_show(wyndow* w, boolean flag) {
 	lnx_wyn_data* lnx = get_lnx(w);
 	if(flag) {
 		XMapWindow(lnx->dsp, w->handle);
@@ -197,6 +200,21 @@ int wyn_linux_show(wyndow* w, bool flag) {
 int wyn_linux_set_title(wyndow* w, const char* desc) {
 	lnx_wyn_data* lnx = get_lnx(w);
 	return XStoreName(lnx->dsp, w->handle, desc);
+}
+
+int wyn_linux_get_metrics(wyndow* w, wyn_vec2* out_size, wyn_vec2* out_pos) {
+    lnx_wyn_data* lnx = get_lnx(w);
+    XWindowAttributes attrib;
+    int res = XGetWindowAttributes(lnx->dsp, w->handle, &attrib);
+    if (out_pos) {
+        out_pos->x = attrib.x;
+        out_pos->y = attrib.y;
+    }
+    if (out_size) {
+        out_size->x = attrib.width;
+        out_size->y = attrib.height;
+    }
+    return res;
 }
 
 int wyn_linux_set_pos(wyndow* w, wyn_vec2 p) { return XMoveWindow(get_lnx(w)->dsp, w->handle, p.x, p.y); }
@@ -292,7 +310,7 @@ int wyn_linux_update(wyndow* w) {
 			s.x = ev.width;
 			s.y = ev.height;
 			if(s.x != lnx->last_metrics.size.x || s.y != lnx->last_metrics.size.y) {
-				lnx_call(w->_callbacks[WYN_RESIZE_CBK_IDX], wyn_rz_callback_proc, w, s,
+				lnx_call(w->_callbacks[WYN_RESIZE_CBK_IDX], wyn_rz_callback_proc, w, &s,
 						 w->_callbakcs_usr_data[WYN_RESIZE_CBK_IDX]);
 			}
 			lnx->last_metrics.pos.x	 = ev.x;
@@ -355,7 +373,7 @@ int wyn_linux_glctx_create(wyndow* w, wyn_glctx* glc, wyn_glctx_crt_info* crt_in
 		crt_info->compatibilityProfile ? GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB : GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
 	glc->handle = glXCreateContextAttribsARB(lnx->dsp, lnx->fb_conf, 0, 1, ctx_attribs);
 	LNX_CHECK(glc, "Failed to create gl context");
-	glXMakeContextCurrent(lnx->dsp, lnx->glx_win, lnx->glx_win, glc->handle);
+	glXMakeContextCurrent(lnx->dsp, lnx->glx_win, lnx->glx_win, (GLXContext)glc->handle);
 	glc->owner = w;
 	return 0;
 }
@@ -363,8 +381,20 @@ int wyn_linux_glctx_create(wyndow* w, wyn_glctx* glc, wyn_glctx_crt_info* crt_in
 void wyn_linux_glctx_destroy(wyn_glctx* glc) {
 	lnx_wyn_data* lnx = get_lnx(glc->owner);
 	glXMakeContextCurrent(lnx->dsp, lnx->glx_win, lnx->glx_win, 0);
-	glXDestroyContext(lnx->dsp, glc->handle);
+	glXDestroyContext(lnx->dsp, (GLXContext)glc->handle);
 	glc->handle = 0;
+}
+
+int (*wyn_glXSwapIntervalMESA)(unsigned int) = 0;
+void wyn_linux_set_vsync(wyndow* w, int interval) {
+    if (wyn_glXSwapIntervalMESA) {
+        wyn_glXSwapIntervalMESA(interval);
+        return;
+    }
+    wyn_glXSwapIntervalMESA = (int(*)(unsigned int))glXGetProcAddress((const GLubyte*)"glXSwapIntervalMESA");
+    if (wyn_glXSwapIntervalMESA) {
+        wyn_glXSwapIntervalMESA(interval);
+    }
 }
 
 void wyn_linux_glctx_make_current(wyndow* w, wyn_glctx* glc) {
@@ -373,80 +403,56 @@ void wyn_linux_glctx_make_current(wyndow* w, wyn_glctx* glc) {
 		glXMakeContextCurrent(lnx->dsp, lnx->glx_win, lnx->glx_win, 0);
 		return;
 	}
-	glXMakeContextCurrent(lnx->dsp, lnx->glx_win, lnx->glx_win, glc->handle);
+	glXMakeContextCurrent(lnx->dsp, lnx->glx_win, lnx->glx_win, (GLXContext)glc->handle);
 	glc->handle = 0;
 	glc->owner	= 0;
 }
 
-bool wyn_linux_key_pressed(wyndow* w, int key) { return w->keyboard.events[key] & Wyn_KeyPressed; }
+boolean wyn_linux_key_pressed(wyndow* w, int key) { return w->keyboard.events[key] & Wyn_KeyPressed; }
 
-bool wyn_linux_on_key_press(wyndow* w, int key) { return w->keyboard.events[key] & Wyn_OnKeyPress; }
+boolean wyn_linux_on_key_press(wyndow* w, int key) { return w->keyboard.events[key] & Wyn_OnKeyPress; }
 
-bool wyn_linux_on_key_release(wyndow* w, int key) { return w->keyboard.events[key] & Wyn_OnKeyRelease; }
+boolean wyn_linux_on_key_release(wyndow* w, int key) { return w->keyboard.events[key] & Wyn_OnKeyRelease; }
+
+boolean wyn_linux_get_mouse_pos(wyndow* w, wyn_vec2* pos) {
+    lnx_wyn_data* lnx = get_lnx(w);
+    Window w1, w2;
+    int x,y;
+    unsigned int mask;
+    XQueryPointer(lnx->dsp, w->handle, &w1, &w2, &pos->x, &pos->y, &x, &y, &mask);
+    return 1;
+}
 
 #endif
 
 #ifdef PLTFRM_WIN32
 int (*wyn_create)(wyndow*, wyn_crt_info*)	 = wyn_win32_create;
 int (*wyn_destroy)(wyndow* w, wyn_crt_info*) = wyn_win32_destroy;
-int (*wyn_show)(wyndow*, bool)				 = wyn_win32_show;
+int (*wyn_show)(wyndow*, boolean)				 = wyn_win32_show;
 #endif
 #ifdef PLTFRM_LINUX
 int (*wyn_create)(wyndow*, wyn_crt_info*)						  = wyn_linux_create;
 int (*wyn_destroy)(wyndow* w)									  = wyn_linux_destroy;
-int (*wyn_show)(wyndow*, bool)									  = wyn_linux_show;
+int (*wyn_show)(wyndow*, boolean)								  = wyn_linux_show;
 int (*wyn_set_title)(wyndow*, const char*)						  = wyn_linux_set_title;
+int (*wyn_get_metrics)(wyndow* w, wyn_vec2*, wyn_vec2*)           = wyn_linux_get_metrics;
 int (*wyn_update)(wyndow* w)									  = wyn_linux_update;
 int (*wyn_swap)(wyndow* w)										  = wyn_linux_swap;
 int (*wyn_glctx_create)(wyndow*, wyn_glctx*, wyn_glctx_crt_info*) = wyn_linux_glctx_create;
 void (*wyn_glctx_make_current)(wyndow* w, wyn_glctx* glc)		  = wyn_linux_glctx_make_current;
 void (*wyn_glctx_destroy)(wyn_glctx* glc)						  = wyn_linux_glctx_destroy;
-bool (*wyn_key_pressed)(wyndow* w, int key)						  = wyn_linux_key_pressed;
-bool (*wyn_on_key_press)(wyndow* w, int key)					  = wyn_linux_on_key_press;
-bool (*wyn_on_key_release)(wyndow* w, int key)					  = wyn_linux_on_key_release;
+void (*wyn_set_vsync)(wyndow* w, int interval)                    = wyn_linux_set_vsync;
+boolean (*wyn_key_pressed)(wyndow* w, int key)                    = wyn_linux_key_pressed;
+boolean (*wyn_on_key_press)(wyndow* w, int key)					  = wyn_linux_on_key_press;
+boolean (*wyn_on_key_release)(wyndow* w, int key)				  = wyn_linux_on_key_release;
+boolean (*wyn_get_mouse_pos)(wyndow* w, wyn_vec2* pos)            = wyn_linux_get_mouse_pos;
 #endif
 
 void wyn_rz_cbk_reg(wyndow* w, wyn_rz_callback_proc proc, void* usr_data) {
-	w->_callbacks[WYN_RESIZE_CBK_IDX]		   = proc;
+	w->_callbacks[WYN_RESIZE_CBK_IDX]		   = (void*)proc;
 	w->_callbakcs_usr_data[WYN_RESIZE_CBK_IDX] = usr_data;
 }
 
-void resize(wyndow* w, wyn_vec2 s, void* usr_data) {
-	glClearColor(1.0, 0.0, 0.0, 1.0);
-	glClear(GL_COLOR_BUFFER_BIT);
-	// printf("Resize Size: %d, %d\n", s.x, s.y);
-	// fflush(stdout);
+#ifdef __cplusplus
 }
-
-int main() {
-	wyndow			   w;
-	wyn_crt_info	   inf;
-	wyn_glctx_crt_info gl_inf;
-	wyn_glctx		   glc;
-	inf.desc					= (char*)"X11Window!";
-	inf.rect.pos.x				= 0;
-	inf.rect.pos.y				= 0;
-	inf.rect.size.x				= 400;
-	inf.rect.size.y				= 400;
-	gl_inf.major				= 3;
-	gl_inf.minor				= 2;
-	gl_inf.compatibilityProfile = 0;
-	wyn_create(&w, &inf);
-	wyn_glctx_create(&w, &glc, &gl_inf);
-	wyn_rz_cbk_reg(&w, resize, 0);
-	resize(&w, inf.rect.pos, 0);
-	while(!w.state.should_close) {
-		if(w.keyboard.events['a'] & Wyn_OnKeyPress) {
-			printf("OnKeyPress\n");
-			fflush(stdout);
-		}
-		if(w.keyboard.events['a'] & Wyn_OnKeyRelease) {
-			printf("OnKeyRelease\n");
-			fflush(stdout);
-		}
-		wyn_update(&w);
-		wyn_swap(&w);
-	};
-	wyn_glctx_destroy(&glc);
-	wyn_destroy(&w);
-}
+#endif
