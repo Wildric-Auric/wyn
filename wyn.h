@@ -2,7 +2,8 @@
 #define _WYN_H
 #include <stdint.h>
 
-#ifdef __cplusplus
+#ifndef __cplusplus
+#else
 extern "C" {
 #endif
 typedef unsigned long Word;
@@ -12,6 +13,7 @@ typedef uint64_t	  ui64;
 typedef unsigned char boolean;
 
 #define WYN_RESIZE_CBK_IDX 0
+#define WYN_UPDATE_CBK_IDX 1
 
 typedef struct {
 	int x;
@@ -25,7 +27,30 @@ typedef struct {
 
 typedef struct {
 	boolean should_close;
+    boolean valid;
 } wyn_state;
+
+enum wyn_key_id {
+    Wyn_Key_RMouse = 511,    
+    Wyn_Key_MMouse = 510,
+    Wyn_Key_LMouse = 509,    
+    Wyn_Key_FMouse = 508,    
+    Wyn_Key_BMouse = 507,    
+    Wyn_Key_LCtrl  = 500,
+    Wyn_Key_RCtrl  = 501,
+    Wyn_Key_LShift = 502,
+    Wyn_Key_RShift = 503,
+    Wyn_Key_LAlt   = 504,
+    Wyn_Key_RAlt   = 505,
+    Wyn_Key_RArrow = 499,
+    Wyn_Key_LArrow = 498,
+    Wyn_Key_UArrow = 497,
+    Wyn_Key_DArrow = 496,
+    Wyn_Key_Ret    = 495,
+    Wyn_Key_Esc    = 494,
+    Wyn_Key_Del    = 493,
+    Wyn_Key_Space  = 492,
+};
 
 enum wyn_event_mask {
 	Wyn_KeyPressed	   = 1 << 0,
@@ -69,9 +94,9 @@ typedef struct {
 typedef void (*wyn_rz_callback_proc)(wyndow* w, wyn_vec2* new_size, void* usr_data);
 
 #ifdef PLTFRM_WIN32
-typedef enum { DWMWCP_DEFAULT = 0, DWMWCP_DONOTROUND = 1, DWMWCP_ROUND = 2, DWMWCP_ROUNDSMALL = 3 } DWM_WINDOW_CORNER_PREFERENCE;
+typedef enum { WYN_DWMWCP_DEFAULT = 0, WYN_DWMWCP_DONOTROUND = 1, WYN_DWMWCP_ROUND = 2, WYN_DWMWCP_ROUNDSMALL = 3 } WYN_DWM_WINDOW_CORNER_PREFERENCE;
 int wyn_win32_create(wyndow*, wyn_crt_info*);
-int wyn_win32_destroy();
+int wyn_win32_destroy(wyndow*);
 #endif
 
 #ifdef PLTFRM_LINUX
@@ -95,6 +120,7 @@ extern boolean (*wyn_on_key_press)(wyndow* w, int key);
 extern boolean (*wyn_on_key_release)(wyndow* w, int key);
 extern boolean (*wyn_get_mouse_pos)(wyndow* w, wyn_vec2* pos);
 void wyn_rz_cbk_reg(wyndow* w, wyn_rz_callback_proc, void* usr_data);
+void wyn_set_callback(wyndow* w, int cbk_ind, void* proc, void* usr_data);
 #ifdef __cplusplus
 }
 #endif
