@@ -6,8 +6,6 @@
 void resize(wyndow* w, wyn_vec2* s, void* usr_data) {
 	glClearColor(1.0, 0.0, 0.0, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
-	// printf("Resize Size: %d, %d\n", s.x, s.y);
-	// fflush(stdout);
 }
 
 int main() {
@@ -36,6 +34,10 @@ int main() {
 			printf("OnKeyRelease\n");
 			fflush(stdout);
 		}
+        if(wyn_on_key_press(&w, Wyn_Key_Space)) {
+			printf("Space pressed\n\n");
+			fflush(stdout);
+        }
 		wyn_update(&w);
 		wyn_swap(&w);
 	};
